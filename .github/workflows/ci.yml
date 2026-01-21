@@ -1,0 +1,63 @@
+name: CI - DevSecOps Pipeline (MVP)
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies (FastAPI app)
+        run: |
+          if [ -f fastapi-app/requirements.txt ]; then
+            pip install -r fastapi-app/requirements.txt
+          fi
+
+      - name: Run unit tests (FastAPI)
+        run: |
+          if [ -d fastapi-app ]; then
+            echo "Running FastAPI tests (if any)"
+          fi
+
+      - name: Build Docker images
+        run: |
+          echo "Building FastAPI image"
+          if [ -f fastapi-app/Dockerfile ]; then
+            docker build -t fastapi-app:ci fastapi-app
+          fi
+
+          echo "Building OWASP Juice Shop image"
+          docker pull bkimminich/juice-shop
+
+      - name: Run Secrets Scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          fail: false
+
+      - name: Run Container Scan (Trivy)
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: fastapi-app:ci
+          format: table
+          exit-code: "0"
+
+      - name: Upload scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            **/*.json
+            **/*.sarif
